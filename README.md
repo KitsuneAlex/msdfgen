@@ -1,5 +1,7 @@
 # Multi-channel signed distance field generator
 
+**Also make sure to check out [the original msdfgen project](https://github.com/Chlumsky/msdfgen) which this project is based on**
+
 This is a utility for generating signed distance fields from vector shapes and font glyphs,
 which serve as a texture representation that can be used in real-time graphics to efficiently reproduce said shapes.
 Although it can also be used to generate conventional signed distance fields best known from

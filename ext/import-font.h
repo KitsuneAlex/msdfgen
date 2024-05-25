@@ -57,6 +57,15 @@ enum FontCoordinateScaling {
     FONT_SCALING_LEGACY
 };
 
+#ifdef MSDFGEN_DYNAMIC_FREETYPE
+/// A function pointer type used for resolving FreeType library functions at runtime.
+using FreetypeLoadCallback = void* (*)(const char* functionName);
+/// Overrides the default dynamic FreeType load callback with a user defined one.
+void setFreetypeLoadCallback(FreetypeLoadCallback callback);
+/// Retrieves the current FreeType load callback.
+FreetypeLoadCallback getFreetypeLoadCallback();
+#endif//MSDFGEN_DYNAMIC_FREETYPE
+
 /// Initializes the FreeType library.
 FreetypeHandle *initializeFreetype();
 /// Deinitializes the FreeType library.
@@ -69,6 +78,8 @@ FontHandle *adoptFreetypeFont(FT_Face ftFace);
 FT_Error readFreetypeOutline(Shape &output, FT_Outline *outline, double scale = MSDFGEN_LEGACY_FONT_COORDINATE_SCALE);
 #endif
 
+/// Creates a FontHandle from FT_Face opaque pointer (mostly used for C-API)
+FontHandle *adoptFreetypeFontRaw(void *ftFace);
 /// Loads a font file and returns its handle.
 FontHandle *loadFont(FreetypeHandle *library, const char *filename);
 /// Loads a font from binary data and returns its handle.

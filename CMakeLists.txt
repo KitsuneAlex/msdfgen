@@ -10,6 +10,7 @@ option(MSDFGEN_USE_CPP11 "Build with C++11 enabled" ON)
 option(MSDFGEN_USE_SKIA "Build with the Skia library" ON)
 option(MSDFGEN_INSTALL "Generate installation target" OFF)
 option(MSDFGEN_DYNAMIC_RUNTIME "Link dynamic runtime library instead of static" OFF)
+option(MSDFGEN_DYNAMIC_FREETYPE "Build with FreeType support enabled but without statically linking to FreeTypee" ON)
 option(BUILD_SHARED_LIBS "Generate dynamic library files instead of static" OFF)
 
 if(MSDFGEN_CORE_ONLY AND MSDFGEN_USE_VCPKG)
@@ -91,7 +92,7 @@ file(GLOB_RECURSE MSDFGEN_EXT_HEADERS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "ext/
 file(GLOB_RECURSE MSDFGEN_EXT_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "ext/*.cpp" "lib/*.cpp")
 
 # Core library
-add_library(msdfgen-core "${CMAKE_CURRENT_SOURCE_DIR}/msdfgen.h" ${MSDFGEN_CORE_HEADERS} ${MSDFGEN_CORE_SOURCES})
+add_library(msdfgen-core "${CMAKE_CURRENT_SOURCE_DIR}/msdfgen.h" "${CMAKE_CURRENT_SOURCE_DIR}/msdfgen-c.h" ${MSDFGEN_CORE_HEADERS} ${MSDFGEN_CORE_SOURCES})
 add_library(msdfgen::msdfgen-core ALIAS msdfgen-core)
 set_target_properties(msdfgen-core PROPERTIES PUBLIC_HEADER "${MSDFGEN_CORE_HEADERS}")
 set_property(TARGET msdfgen-core PROPERTY MSVC_RUNTIME_LIBRARY "${MSDFGEN_MSVC_RUNTIME}")
@@ -120,16 +121,21 @@ if(MSDFGEN_USE_OPENMP)
     target_link_libraries(msdfgen-core PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
-if(BUILD_SHARED_LIBS AND WIN32)
-    target_compile_definitions(msdfgen-core PRIVATE "MSDFGEN_PUBLIC=__declspec(dllexport)")
-    target_compile_definitions(msdfgen-core INTERFACE "MSDFGEN_PUBLIC=__declspec(dllimport)")
+if(BUILD_SHARED_LIBS)
+    if(WIN32)
+        target_compile_definitions(msdfgen-core PRIVATE "MSDFGEN_PUBLIC=__declspec(dllexport)")
+        target_compile_definitions(msdfgen-core INTERFACE "MSDFGEN_PUBLIC=__declspec(dllimport)")
+    else()
+        target_compile_definitions(msdfgen-core PRIVATE "MSDFGEN_PUBLIC=__attribute__((visibility(\"default\")))")
+        target_compile_definitions(msdfgen-core INTERFACE "MSDFGEN_PUBLIC=")
+    endif()
 else()
-    target_compile_definitions(msdfgen-core PUBLIC MSDFGEN_PUBLIC=)
+    target_compile_definitions(msdfgen-core PUBLIC "MSDFGEN_PUBLIC=")
 endif()
 
 # Extensions library
 if(NOT MSDFGEN_CORE_ONLY)
-    if(NOT TARGET Freetype::Freetype)
+    if(NOT TARGET Freetype::Freetype AND NOT MSDFGEN_DYNAMIC_FREETYPE)
         find_package(Freetype REQUIRED)
     endif()
     if(NOT MSDFGEN_DISABLE_SVG AND NOT TARGET tinyxml2::tinyxml2)
@@ -139,11 +145,19 @@ if(NOT MSDFGEN_CORE_ONLY)
         find_package(PNG REQUIRED)
     endif()
 
-    add_library(msdfgen-ext "${CMAKE_CURRENT_SOURCE_DIR}/msdfgen-ext.h" ${MSDFGEN_EXT_HEADERS} ${MSDFGEN_EXT_SOURCES})
+    add_library(msdfgen-ext "${CMAKE_CURRENT_SOURCE_DIR}/msdfgen-ext.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/msdfgen-ext-c.h"
+            ${MSDFGEN_EXT_HEADERS}
+            ${MSDFGEN_EXT_SOURCES})
     add_library(msdfgen::msdfgen-ext ALIAS msdfgen-ext)
     set_target_properties(msdfgen-ext PROPERTIES PUBLIC_HEADER "${MSDFGEN_EXT_HEADERS}")
     set_property(TARGET msdfgen-ext PROPERTY MSVC_RUNTIME_LIBRARY "${MSDFGEN_MSVC_RUNTIME}")
     target_compile_definitions(msdfgen-ext INTERFACE MSDFGEN_EXTENSIONS)
+    if(MSDFGEN_DYNAMIC_FREETYPE)
+        target_compile_definitions(msdfgen-ext PUBLIC MSDFGEN_DYNAMIC_FREETYPE)
+    else()
+        target_link_libraries(msdfgen-ext PRIVATE Freetype::Freetype)
+    endif()
     if(NOT MSDFGEN_DISABLE_SVG)
         target_compile_definitions(msdfgen-ext PUBLIC MSDFGEN_USE_TINYXML2)
         target_link_libraries(msdfgen-ext PRIVATE tinyxml2::tinyxml2)
@@ -159,7 +173,7 @@ if(NOT MSDFGEN_CORE_ONLY)
     if(MSDFGEN_DISABLE_VARIABLE_FONTS)
         target_compile_definitions(msdfgen-ext PUBLIC MSDFGEN_DISABLE_VARIABLE_FONTS)
     endif()
-    target_link_libraries(msdfgen-ext PRIVATE Freetype::Freetype msdfgen::msdfgen-core)
+    target_link_libraries(msdfgen-ext PRIVATE msdfgen::msdfgen-core)
     target_include_directories(msdfgen-ext
         PUBLIC
             $<INSTALL_INTERFACE:include/msdfgen>
